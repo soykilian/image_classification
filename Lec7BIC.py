@@ -147,8 +147,9 @@ n_epochs = 100
 sbsBIC1=StepByStep(ECE655BICmodel1, loss_fn, optimizer)
 sbsBIC1.set_loaders(train_loader, val_loader)
 sbsBIC1.train(n_epochs)
-
+plt.figure()
 fig=sbsBIC1.PlotLossesWithInfo('ECE655model1')
+plt.savefig('./ECE655model1.png')
 
 
 
@@ -165,7 +166,9 @@ sbsBIC1b=StepByStep(ECE655BICmodel1b, loss_fn, optimizer)
 sbsBIC1b.set_loaders(train_loader, val_loader)
 sbsBIC1b.train(n_epochs)
 
+plt.figure()
 fig=sbsBIC1b.PlotLossesWithInfo('ECE655model1b')
+plt.savefig('./ECE655model1b.png')
 
 
 

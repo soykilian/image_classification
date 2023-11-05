@@ -9,6 +9,7 @@ plt.style.use('fivethirtyeight')
 from matplotlib import ticker
 from matplotlib.ticker import FormatStrFormatter
 
+import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 
 
@@ -147,7 +148,6 @@ class StepByStep(object):
         self.set_seed(seed)
 
         for epoch in range(n_epochs):
-            print(f"Epoch {epoch+1}/{n_epochs}")
             # Keeps track of the numbers of epochs
             # by updating the corresponding attribute
             self.total_epochs += 1
@@ -217,7 +217,7 @@ class StepByStep(object):
     def plot_losses(self):
         fig = plt.figure(figsize=(10, 4))
         plt.plot(self.losses, label='Training Loss', c='b')
-        plt.plot(self.val_losses, np.arange(0,99),slabel='Validation Loss', c='r')
+        plt.plot(self.val_losses, label='Validation Loss', c='r')
         plt.yscale('log')
         plt.xlabel('Epochs')
         plt.ylabel('Loss')
@@ -228,22 +228,21 @@ class StepByStep(object):
     def PlotLossesWithInfo(self, ModelName=None):
         fig = plt.figure(figsize=(10, 4))
         ax=fig.gca()
-        print("Losses:", len(self.losses))
         plt.plot(self.losses, label='Training Loss', c='b')
         plt.plot(self.val_losses, label='Validation Loss', c='r')
         if ModelName != None:
             pars   = self.count_parameters()
             minT   = min(self.losses)
             minV   = min(self.val_losses)
-            P = f"{ModelName} ({pars} params)     BCEmin = "
+            P = f"{ModelName} ({pars} params)     CEmin = "
             PlotTitle=f"{P}{minT:4.3f} (train)   {minV:4.3f} (val)"
             
             plt.title(PlotTitle)
         plt.yscale('log')
         plt.xlabel('Epochs')
-        plt.ylabel('BCELoss')
+        plt.ylabel('CELoss')
         ax.yaxis.set_major_formatter(FormatStrFormatter('% 4.3f'))
-        yTicks=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
+        yTicks=[0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
         ax.set_yticks(yTicks)
         plt.legend()
         plt.tight_layout()
@@ -258,3 +257,65 @@ class StepByStep(object):
 
     def count_parameters(self):
         return sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+    
+    def _visualize_tensors(axs, x, y=None, yhat=None, layer_name='', title=None):
+        # The number of images is the number of subplots in a row
+        n_images = len(axs)
+        # Gets max and min values for scaling the grayscale
+        minv, maxv = np.min(x[:n_images]), np.max(x[:n_images])
+        # For each image
+        for j, image in enumerate(x[:n_images]):
+            ax = axs[j]
+            # Sets title, labels, and removes ticks
+            if title is not None:
+                ax.set_title(f'{title} #{j}', fontsize=12)
+            shp = np.atleast_2d(image).shape
+            LayerName=f"{layer_name}\n{shp[0]}x{shp[1]}"
+            ax.set_ylabel(LayerName, rotation=0, labelpad=40)
+            xlabel1 = '' if y is None else f'\nLabel: {y[j]}'
+            xlabel2 = '' if yhat is None else f'\nPredicted: {yhat[j]}'
+            xlabel = f'{xlabel1}{xlabel2}'
+            if len(xlabel):
+                ax.set_xlabel(xlabel, fontsize=12)
+            ax.set_xticks([])
+            ax.set_yticks([])
+    
+            # Plots weight as an image
+            ax.imshow(np.atleast_2d(image.squeeze()),
+                cmap='gray', vmin=minv, vmax=maxv)
+        return
+
+
+    def visualize_filters(self, layer_name, **kwargs):
+        try:
+            # Gets the layer object from the model
+            layer = self.model
+            for name in layer_name.split('.'):
+                layer = getattr(layer, name)
+            # We are only looking at filters for 2D convolutions
+            if isinstance(layer, nn.Conv2d):
+                # Takes the weight information
+                weights = layer.weight.data.cpu().numpy()
+                # weights -> (channels_out (filter), channels_in, H, W)
+                n_filters, n_channels, _, _ = weights.shape
+
+                # Builds a figure
+                s = (2 * n_channels + 2, 2 * n_filters)
+                fig, axes = plt.subplots(n_filters, n_channels, figsize=s)
+                axes = np.atleast_2d(axes)
+                axes = axes.reshape(n_filters, n_channels)
+                # For each channel_out (filter)
+                for i in range(n_filters):
+                    StepByStep._visualize_tensors(axes[i, :], weights[i], 
+                                                  layer_name=f'Filter #{i}',
+                                                  title='Channel')
+                        
+                for ax in axes.flat:
+                    ax.label_outer()
+
+                fig.tight_layout()
+                return fig
+        except AttributeError:
+                return
+
+    
